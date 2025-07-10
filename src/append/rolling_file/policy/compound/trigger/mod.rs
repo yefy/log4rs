@@ -12,9 +12,6 @@ pub mod size;
 #[cfg(feature = "time_trigger")]
 pub mod time;
 
-#[cfg(feature = "onstartup_trigger")]
-pub mod onstartup;
-
 /// A trait which identifies if the active log file should be rolled over.
 pub trait Trigger: fmt::Debug + Send + Sync + 'static {
     /// Determines if the active log file should be rolled over.

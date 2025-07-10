@@ -8,7 +8,8 @@ use std::{
 use thiserror::Error;
 
 use super::{init_config, Config, Deserializers, Handle, RawConfig};
-use crate::handle_error;
+use crate::{handle_error, Log4Handle};
+use std::sync::atomic::Ordering;
 
 /// Initializes the global logger as a log4rs logger configured via a file.
 ///
@@ -19,7 +20,7 @@ use crate::handle_error;
 /// reported to stderr.
 ///
 /// Requires the `file` feature (enabled by default).
-pub fn init_file<P>(path: P, deserializers: Deserializers) -> anyhow::Result<()>
+pub fn init_file<P>(path: P, deserializers: Deserializers) -> anyhow::Result<Log4Handle>
 where
     P: AsRef<Path>,
 {
@@ -32,6 +33,7 @@ where
 
     let refresh_rate = config.refresh_rate();
     let config = deserialize(&config, &deserializers);
+    let log4_handle = Log4Handle::new();
 
     match init_config(config) {
         Ok(handle) => {
@@ -44,9 +46,10 @@ where
                     modified,
                     deserializers,
                     handle,
+                    log4_handle.clone(),
                 );
             }
-            Ok(())
+            Ok(log4_handle)
         }
         Err(e) => Err(e.into()),
     }
@@ -164,6 +167,7 @@ struct ConfigReloader {
     modified: Option<SystemTime>,
     deserializers: Deserializers,
     handle: Handle,
+    log4_handle: Log4Handle,
 }
 
 impl ConfigReloader {
@@ -175,6 +179,7 @@ impl ConfigReloader {
         modified: Option<SystemTime>,
         deserializers: Deserializers,
         handle: Handle,
+        log4_handle: Log4Handle,
     ) {
         let mut reloader = ConfigReloader {
             path,
@@ -183,6 +188,7 @@ impl ConfigReloader {
             modified,
             deserializers,
             handle,
+            log4_handle,
         };
 
         thread::Builder::new()
@@ -192,11 +198,21 @@ impl ConfigReloader {
     }
 
     fn run(&mut self, mut rate: Duration) {
+        let mut time_ms = rate.as_millis();
+        let mut sleep_time_msg = 0;
         loop {
-            thread::sleep(rate);
+            thread::sleep(std::time::Duration::from_millis(1000));
+            sleep_time_msg += 1000;
+            if sleep_time_msg < time_ms && !self.log4_handle.reopen_flag.load(Ordering::Relaxed) {
+                continue;
+            }
+            sleep_time_msg = 0;
 
             match self.run_once(rate) {
-                Ok(Some(r)) => rate = r,
+                Ok(Some(r)) => {
+                    rate = r;
+                    time_ms = rate.as_millis();
+                }
                 Ok(None) => break,
                 Err(e) => handle_error(&e),
             }
@@ -204,6 +220,15 @@ impl ConfigReloader {
     }
 
     fn run_once(&mut self, rate: Duration) -> anyhow::Result<Option<Duration>> {
+        let reopen_txs = self.log4_handle.get_reopen_txs();
+        let desc = if !reopen_txs.is_empty() {
+            self.modified = None;
+            self.source = "".to_string();
+            "----------------------------------reopen"
+        } else {
+            "----------------------------------reconfig"
+        };
+
         if let Some(last_modified) = self.modified {
             let modified = fs::metadata(&self.path).and_then(|m| m.modified())?;
             if last_modified == modified {
@@ -225,7 +250,16 @@ impl ConfigReloader {
         let rate = config.refresh_rate();
         let config = deserialize(&config, &self.deserializers);
 
+        eprintln!("{}", desc);
+        log::info!("{}", desc);
         self.handle.set_config(config);
+
+        for tx in reopen_txs {
+            let _ = tx.try_send(());
+        }
+
+        eprintln!("{}", desc);
+        log::info!("{}", desc);
 
         Ok(rate)
     }

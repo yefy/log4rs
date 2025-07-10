@@ -2,14 +2,17 @@
 //!
 //! Requires the `time_trigger` feature.
 
+#[cfg(test)]
+use chrono::NaiveDateTime;
 use chrono::{DateTime, Datelike, Duration, Local, TimeZone, Timelike};
-
+#[cfg(test)]
+use mock_instant::{SystemTime, UNIX_EPOCH};
 use rand::Rng;
 #[cfg(feature = "config_parsing")]
 use serde::de;
 #[cfg(feature = "config_parsing")]
 use std::fmt;
-use std::sync::{Once, RwLock};
+use std::sync::RwLock;
 
 use crate::append::rolling_file::{policy::compound::trigger::Trigger, LogFile};
 #[cfg(feature = "config_parsing")]
@@ -20,26 +23,20 @@ use crate::config::{Deserialize, Deserializers};
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TimeTriggerConfig {
-    /// The date/time interval between log file rolls.
-    pub interval: TimeTriggerInterval,
-    /// Whether to modulate the interval.
+    interval: TimeTriggerInterval,
     #[serde(default)]
-    pub modulate: bool,
-    /// The maximum random delay in seconds.
+    modulate: bool,
     #[serde(default)]
-    pub max_random_delay: u64,
+    max_random_delay: u64,
 }
 
 #[cfg(not(feature = "config_parsing"))]
 /// Configuration for the time trigger.
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default)]
 pub struct TimeTriggerConfig {
-    /// The date/time interval between log file rolls.Q
-    pub interval: TimeTriggerInterval,
-    /// Whether to modulate the interval.
-    pub modulate: bool,
-    /// The maximum random delay in seconds.
-    pub max_random_delay: u64,
+    interval: TimeTriggerInterval,
+    modulate: bool,
+    max_random_delay: u64,
 }
 
 /// A trigger which rolls the log once it has passed a certain time.
@@ -47,7 +44,6 @@ pub struct TimeTriggerConfig {
 pub struct TimeTrigger {
     config: TimeTriggerConfig,
     next_roll_time: RwLock<DateTime<Local>>,
-    initial: Once,
 }
 
 /// The TimeTrigger supports the following units (case insensitive):
@@ -75,25 +71,6 @@ impl Default for TimeTriggerInterval {
     fn default() -> Self {
         TimeTriggerInterval::Second(1)
     }
-}
-
-#[cfg(mock_time)]
-fn get_current_time() -> DateTime<Local> {
-    use mock_instant::thread_local::{SystemTime, UNIX_EPOCH};
-
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("system time before Unix epoch");
-    DateTime::from_timestamp(now.as_secs() as i64, now.subsec_nanos())
-        .unwrap()
-        .naive_local()
-        .and_local_timezone(Local)
-        .unwrap()
-}
-
-#[cfg(not(mock_time))]
-fn get_current_time() -> DateTime<Local> {
-    Local::now()
 }
 
 #[cfg(feature = "config_parsing")]
@@ -199,24 +176,44 @@ impl TimeTrigger {
     /// Returns a new trigger which rolls the log once it has passed the
     /// specified time.
     pub fn new(config: TimeTriggerConfig) -> TimeTrigger {
+        #[cfg(test)]
+        let current = {
+            let now: std::time::Duration = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system time before Unix epoch");
+            NaiveDateTime::from_timestamp_opt(now.as_secs() as i64, now.subsec_nanos())
+                .unwrap()
+                .and_local_timezone(Local)
+                .unwrap()
+        };
+
+        #[cfg(not(test))]
+        let current = Local::now();
+        let next_time = TimeTrigger::get_next_time(current, config.interval, config.modulate);
+        let next_roll_time = if config.max_random_delay > 0 {
+            let random_delay = rand::thread_rng().gen_range(0..config.max_random_delay);
+            next_time + Duration::seconds(random_delay as i64)
+        } else {
+            next_time
+        };
+
         TimeTrigger {
             config,
-            next_roll_time: RwLock::default(),
-            initial: Once::new(),
+            next_roll_time: RwLock::new(next_roll_time),
         }
     }
 
-    fn get_next_time(&self, current: DateTime<Local>) -> DateTime<Local> {
-        let interval = self.config.interval;
-        let modulate = self.config.modulate;
-
+    fn get_next_time(
+        current: DateTime<Local>,
+        interval: TimeTriggerInterval,
+        modulate: bool,
+    ) -> DateTime<Local> {
         let year = current.year();
         if let TimeTriggerInterval::Year(n) = interval {
             let n = n as i32;
             let increment = if modulate { n - year % n } else { n };
             let year_new = year + increment;
-            let result = Local.with_ymd_and_hms(year_new, 1, 1, 0, 0, 0).unwrap();
-            return result;
+            return Local.with_ymd_and_hms(year_new, 1, 1, 0, 0, 0).unwrap();
         }
 
         if let TimeTriggerInterval::Month(n) = interval {
@@ -227,10 +224,9 @@ impl TimeTrigger {
             let num_months_new = num_months + increment;
             let year_new = (num_months_new / 12) as i32;
             let month_new = (num_months_new) % 12 + 1;
-            let result = Local
+            return Local
                 .with_ymd_and_hms(year_new, month_new, 1, 0, 0, 0)
                 .unwrap();
-            return result;
         }
 
         let month = current.month();
@@ -278,32 +274,29 @@ impl TimeTrigger {
         }
         panic!("Should not reach here!");
     }
-
-    fn refresh_time(&self) {
-        let current = get_current_time();
-        let next_time = self.get_next_time(current);
-        let next_roll_time = if self.config.max_random_delay > 0 {
-            let random_delay = rand::rng().random_range(0..self.config.max_random_delay);
-            next_time + Duration::seconds(random_delay as i64)
-        } else {
-            next_time
-        };
-        *self.next_roll_time.write().unwrap() = next_roll_time;
-    }
 }
 
 impl Trigger for TimeTrigger {
     fn trigger(&self, _file: &LogFile) -> anyhow::Result<bool> {
-        self.initial.call_once(|| {
-            self.refresh_time();
-        });
+        #[cfg(test)]
+        let current = {
+            let now = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system time before Unix epoch");
+            NaiveDateTime::from_timestamp_opt(now.as_secs() as i64, now.subsec_nanos())
+                .unwrap()
+                .and_local_timezone(Local)
+                .unwrap()
+        };
 
-        let current = get_current_time();
-        let next_roll_time = self.next_roll_time.read().unwrap();
+        #[cfg(not(test))]
+        let current: DateTime<Local> = Local::now();
+        let mut next_roll_time = self.next_roll_time.write().unwrap();
         let is_trigger = current >= *next_roll_time;
-        drop(next_roll_time);
         if is_trigger {
-            self.refresh_time();
+            let tmp = TimeTrigger::new(self.config);
+            let time_new = tmp.next_roll_time.read().unwrap();
+            *next_roll_time = *time_new;
         }
         Ok(is_trigger)
     }
@@ -347,10 +340,9 @@ impl Deserialize for TimeTriggerDeserializer {
 #[cfg(test)]
 mod test {
     use super::*;
-    #[cfg(mock_time)]
-    use mock_instant::thread_local::MockClock;
+    use mock_instant::MockClock;
+    use std::time::Duration;
 
-    #[cfg(mock_time)]
     fn trigger_with_time_and_modulate(
         interval: TimeTriggerInterval,
         modulate: bool,
@@ -362,6 +354,7 @@ mod test {
             path: file.path(),
             len: 0,
         };
+
         let config = TimeTriggerConfig {
             interval,
             modulate,
@@ -369,19 +362,17 @@ mod test {
         };
 
         let trigger = TimeTrigger::new(config);
-        trigger.trigger(&logfile).unwrap();
 
-        MockClock::advance_system_time(std::time::Duration::from_millis(millis / 2));
+        MockClock::advance_system_time(Duration::from_millis(millis / 2));
         let result1 = trigger.trigger(&logfile).unwrap();
 
-        MockClock::advance_system_time(std::time::Duration::from_millis(millis / 2));
+        MockClock::advance_system_time(Duration::from_millis(millis / 2));
         let result2 = trigger.trigger(&logfile).unwrap();
 
         (result1, result2)
     }
 
     #[test]
-    #[cfg(mock_time)]
     fn trigger() {
         let second_in_milli = 1000;
         let minute_in_milli = second_in_milli * 60;
@@ -401,17 +392,15 @@ mod test {
             (TimeTriggerInterval::Year(1), year_in_milli),
         ];
         let modulate = false;
-        for (time_trigger_interval, time_in_milli) in &test_list {
-            dbg!(time_in_milli);
-            MockClock::set_system_time(std::time::Duration::from_millis(4 * day_in_milli)); // 1970/1/5 00:00:00 Monday
+        for (time_trigger_interval, time_in_milli) in test_list.iter() {
+            MockClock::set_system_time(Duration::from_millis(4 * day_in_milli)); // 1970/1/5 00:00:00 Monday
             assert_eq!(
                 trigger_with_time_and_modulate(*time_trigger_interval, modulate, *time_in_milli),
                 (false, true)
             );
             // trigger will be aligned with units.
             MockClock::set_system_time(
-                std::time::Duration::from_millis(4 * day_in_milli)
-                    + std::time::Duration::from_millis(time_in_milli / 2),
+                Duration::from_millis(4 * day_in_milli) + Duration::from_millis(time_in_milli / 2),
             );
             assert_eq!(
                 trigger_with_time_and_modulate(*time_trigger_interval, modulate, *time_in_milli),
@@ -429,9 +418,8 @@ mod test {
             (TimeTriggerInterval::Year(3), 3 * year_in_milli),
         ];
         let modulate = true;
-        for (time_trigger_interval, time_in_milli) in &test_list {
-            dbg!(time_in_milli);
-            MockClock::set_system_time(std::time::Duration::from_millis(
+        for (time_trigger_interval, time_in_milli) in test_list.iter() {
+            MockClock::set_system_time(Duration::from_millis(
                 59 * day_in_milli + 2 * hour_in_milli + 2 * minute_in_milli + 2 * second_in_milli,
             )); // 1970/3/1 02:02:02 Sunday
             assert_eq!(

@@ -8,7 +8,7 @@ The more common configuration method, however, is via a separate config file.
 The `init_file` function takes the path to a config file as well as a
 `Deserializers` object which is responsible for instantiating the various
 objects specified by the config file. The following section covers the exact
-configuration syntax. Examples of both the programmatic and configuration files
+configuration syntax. Examples of both the programatic and configuration files
 can be found in the
 [examples directory](https://github.com/estk/log4rs/tree/main/examples).
 
@@ -88,7 +88,7 @@ loggers:
 Root is the required logger. It is the parent to all children loggers. To
 configure the Root, refer to [the logger section](#logger-configuration).
 
-> Note: The root logger has no parent, and therefore the _additive_
+> Note: The root logger has no parent and therefore cannot the _additive_
 field does not apply.
 
 ```yml
@@ -131,11 +131,6 @@ my_console_appender:
 The _path_ field is required and accepts environment variables of the form
 `$ENV{name_here}`. The path can be relative or absolute.
 
-The _path_ field also supports date/time formats such as `$TIME{chrono_format}`. Refer
-to [chrono format](https://docs.rs/chrono/latest/chrono/format/strftime/index.html) for date and time formatting syntax
-
-**Note:** There is a maximum of 5 `$TIME{...}` replacements per path. If more than 5 `$TIME{...}` placeholders are present, only the first 5 will be replaced; the rest will remain unchanged in the path.
-
 The _encoder_ field is optional and can consist of multiple fields. Refer to
 the [encoder](#encoder) documention.
 
@@ -145,7 +140,7 @@ append to the log file if it exists, false will truncate the existing file.
 ```yml
 my_file_appender:
   kind: file
-  path: $ENV{PWD}/log/test_$TIME{%Y-%m-%d_%H-%M-%S}.log
+  path: $ENV{PWD}/log/test.log
   append: true
 ```
 
@@ -177,7 +172,7 @@ The new component is the _policy_ field. A policy must have the _kind_ field lik
 other components, the default (and only supported) policy is `kind: compound`.
 
 The _trigger_ field is used to dictate when the log file should be rolled. It
-supports three types: `size`, `time` and `onstartup`.
+supports two types: `size`, and `time`.
 
 For `size`, it require a _limit_ field. The _limit_ field is a string which defines the maximum file size
 prior to a rolling of the file. The limit field requires one of the following
@@ -238,16 +233,6 @@ trigger:
     max_random_delay: 0
 ```
 
-For `onstartup`, it has an optional field, _min_size_. It indicates the minimum size the file must have to roll over. A size of zero will cause a roll over no matter what the file size is. The default value is 1, which will prevent rolling over an empty file.
-
-i.e.
-
-```yml
-trigger:
-    kind: onstartup
-    min_size: 1
-```
-
 The _roller_ field supports two types: delete, and fixed_window. The delete
 roller does not take any other configuration fields. The fixed_window roller
 supports three fields: pattern, base, and count. The most current log file will
@@ -258,9 +243,6 @@ double curly brace `{}`. For example `archive/foo.{}.log`. Each instance of
 `{}` will be replaced with the index number of the configuration file. Note
 that if the file extension of the pattern is `.gz` and the `gzip` Cargo
 feature is enabled, the archive files will be gzip-compressed.
-If the file extension of the pattern is `.zst` and the `zstd` Cargo
-feature is enabled, the archive files will be compressed using the 
-[Zstandard](https://facebook.github.io/zstd/) compression algorithm.
 
 > Note: This pattern field is only used for archived files. The `path` field
 > of the higher level `rolling_file` will be used for the active log file.

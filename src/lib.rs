@@ -22,7 +22,6 @@
 //!       - Triggers
 //!         - [size](append/rolling_file/policy/compound/trigger/size/struct.SizeTriggerDeserializer.html#configuration): requires the `size_trigger` feature
 //!         - [time](append/rolling_file/policy/compound/trigger/tine/struct.TimeTriggerDeserializer.html#configuration): requires the `time_trigger` feature
-//!         - [onstartup](append/rolling_file/policy/compound/trigger/tine/struct.OnStartUpTriggerDeserializer.html#configuration): requires the `onstartup_trigger` feature
 //!
 //! ## Encoders
 //!
@@ -174,132 +173,10 @@
 //! # fn main() {}
 //! ```
 //!
-//! ## Custom implementations of logging components
-//!
-//! You can impl some trait for your struct and use it with log4rs. For example:
-//! - Impl [log4rs::append::Append](append/trait.Append.html) for your custom appender.
-//! - Impl [log4rs::encode::Encode](encode/trait.Encode.html) for your custom encoder.
-//! - Impl [log4rs::filter::Filter](filter/trait.Filter.html) for your custom filter.
-//!
-//! Here is a very simple example to create a custom appender,
-//! for more examples about custom, see [examples/custom.rs](https://github.com/estk/log4rs/tree/main/examples/custom.rs):
-//! ```no_run
-//! # fn f() {
-//! use log4rs::append::Append;
-//! use log4rs::config::{Appender, Root};
-//!
-//! #[derive(Debug)]
-//! struct MyAppender(usize);
-//!
-//! // impl your process record logic here
-//! impl Append for MyAppender {
-//!     fn append(&self, record: &log::Record) -> anyhow::Result<()> {
-//!         println!("appender({}): {record:?}", self.0);
-//!         Ok(())
-//!     }
-//!     fn flush(&self) {}
-//! }
-//!
-//! fn main() {
-//!     let appender = MyAppender(100);
-//!     let log_config = log4rs::config::Config::builder()
-//!         .appender(Appender::builder().build("my_appender", Box::new(appender)))
-//!         .build(
-//!             Root::builder()
-//!                 .appender("my_appender")
-//!                 .build(log::LevelFilter::Info),
-//!         )
-//!         .unwrap();
-//!     log4rs::init_config(log_config).unwrap();
-//!     log::trace!("This is a trace message");
-//!     log::info!("This is an info message");
-//!     log::warn!("This is a warning message");
-//! }
-//! # }
-//! # fn main() {}
-//! ```
-//!
-//! To configure log4rs with a file, you should implement [log4rs::config::Deserialize](config/trait.Deserialize.html) for your config and be sure to register it with [log4rs::config::Deserializers](config/struct.Deserializers.html) as shown in the example below.
-//!
-//! Here is a very simple example to use a custom appender with custom config.
-//! For more examples about custom config file, see [examples/custom_config.rs](https://github.com/estk/log4rs/tree/main/examples/custom_config.rs):
-//! ```yaml
-//! # custom_config.yml
-//! appenders:
-//!   my_appender:
-//!     kind: custom_appender
-//!     appender_data: 42
-//!
-//! root:
-//!   level: INFO
-//!   appenders:
-//!     - my_appender
-//! ```
-//!
-//! ```no_run
-//! # #[cfg(feature = "config_parsing")]
-//! # fn f() {
-//! use log4rs::append::Append;
-//! use log4rs::config::{Deserialize, Deserializers};
-//!
-//! #[derive(Debug)]
-//! struct MyAppender(usize);
-//!
-//! // impl your process record logic here
-//! impl Append for MyAppender {
-//!     fn append(&self, record: &log::Record) -> anyhow::Result<()> {
-//!         println!("appender({}): {record:?}", self.0);
-//!         Ok(())
-//!     }
-//!     fn flush(&self) {}
-//! }
-//! // Define config struct for custom appender
-//! #[derive(serde::Deserialize)]
-//! pub struct MyAppenderConfig {
-//!     pub appender_data: Option<usize>,
-//! }
-//!
-//! #[derive(Default)]
-//! pub struct MyAppenderDeserializer;
-//!
-//! // impl Deserialize for custom appender config
-//! impl Deserialize for MyAppenderDeserializer {
-//!     type Trait = dyn Append;
-//!
-//!     type Config = MyAppenderConfig;
-//!
-//!     fn deserialize(
-//!         &self,
-//!         config: MyAppenderConfig,
-//!         _: &Deserializers,
-//!     ) -> anyhow::Result<Box<Self::Trait>> {
-//!         let appender_data = config.appender_data.unwrap_or(0);
-//!         let appender = MyAppender(appender_data);
-//!         Ok(Box::new(appender))
-//!     }
-//! }
-//!
-//! fn main() {
-//!     let log_file = "custom_config.yml";
-//!     // Access the default deserializers map
-//!     let mut deserializers = Deserializers::default();
-//!     // Register the "custom_appender" deserializer into the default deserializers map
-//!     deserializers.insert("custom_appender", MyAppenderDeserializer);
-//!     // Initialize log4rs with the custom deserializers from the file
-//!     log4rs::init_file(log_file, deserializers).unwrap();
-//!
-//!     log::trace!("This is a trace message");
-//!     log::info!("This is an info message");
-//!     log::warn!("This is a warning message");
-//! }
-//! # }
-//! # fn main() {}
-//! ```
-//!
 //! For more examples see the [examples](https://github.com/estk/log4rs/tree/main/examples).
 //!
 
-#![allow(clippy::manual_non_exhaustive)]
+#![allow(where_clauses_object_safety, clippy::manual_non_exhaustive)]
 #![warn(missing_docs)]
 
 use std::{
@@ -316,6 +193,7 @@ pub mod encode;
 pub mod filter;
 #[cfg(feature = "console_writer")]
 mod priv_io;
+pub mod util;
 
 pub use config::{init_config, Config};
 
@@ -323,6 +201,8 @@ pub use config::{init_config, Config};
 pub use config::{init_file, init_raw_config};
 
 use self::{append::Append, filter::Filter};
+use crate::util::async_channel::AsyncChannel;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 type FnvHashMap<K, V> = HashMap<K, V, BuildHasherDefault<FnvHasher>>;
 
@@ -536,12 +416,6 @@ impl Logger {
     pub fn max_log_level(&self) -> LevelFilter {
         self.0.load().root.max_log_level()
     }
-    /// Get a `Handler` instance to reconfigure logger while running
-    pub fn handle(&self) -> Handle {
-        Handle {
-            shared: self.0.clone(),
-        }
-    }
 }
 
 impl log::Log for Logger {
@@ -590,10 +464,48 @@ impl Handle {
         log::set_max_level(shared.root.max_log_level());
         self.shared.store(Arc::new(shared));
     }
+}
 
-    /// Get the maximum log level according to the current configuration
-    pub fn max_log_level(&self) -> LevelFilter {
-        self.shared.load().root.max_log_level()
+///Log4Handle
+#[derive(Clone)]
+pub struct Log4Handle {
+    reopen_flag: Arc<AtomicBool>,
+    reopen_async_channel: Arc<AsyncChannel<async_channel::Sender<()>>>,
+}
+
+impl Log4Handle {
+    ///Log4Handle new
+    pub fn new() -> Self {
+        Self {
+            reopen_flag: Arc::new(AtomicBool::new(false)),
+            reopen_async_channel: Arc::new(AsyncChannel::new(0)),
+        }
+    }
+
+    ///Log4Handle reopen
+    pub fn reopen(&self) -> async_channel::Receiver<()> {
+        let async_channel = AsyncChannel::new(0);
+        let _ = self
+            .reopen_async_channel
+            .tx
+            .send_blocking(async_channel.tx.clone());
+        self.reopen_flag.store(true, Ordering::Relaxed);
+        return async_channel.rx.clone();
+    }
+    ///Log4Handle get_reopen_txs
+    pub fn get_reopen_txs(&self) -> Vec<async_channel::Sender<()>> {
+        let mut txs = Vec::with_capacity(10);
+        if self.reopen_flag.load(Ordering::Relaxed) {
+            self.reopen_flag.store(false, Ordering::Relaxed);
+            loop {
+                let tx = self.reopen_async_channel.rx.try_recv();
+                if tx.is_err() {
+                    break;
+                }
+                txs.push(tx.unwrap());
+            }
+        }
+        txs
     }
 }
 

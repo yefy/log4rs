@@ -89,10 +89,12 @@
 //! ```
 #![allow(deprecated)]
 
-use std::{collections::HashMap, fmt, marker::PhantomData, sync::Arc, time::Duration};
+use std::{
+    borrow::ToOwned, collections::HashMap, fmt, marker::PhantomData, sync::Arc, time::Duration,
+};
 
 use anyhow::anyhow;
-use derive_more::Debug;
+use derivative::Derivative;
 use log::LevelFilter;
 use serde::de::{self, Deserialize as SerdeDeserialize, DeserializeOwned};
 use serde_value::Value;
@@ -219,12 +221,6 @@ impl Default for Deserializers {
             append::rolling_file::policy::compound::trigger::time::TimeTriggerDeserializer,
         );
 
-        #[cfg(feature = "onstartup_trigger")]
-        d.insert(
-            "onstartup",
-            append::rolling_file::policy::compound::trigger::onstartup::OnStartUpTriggerDeserializer,
-        );
-
         #[cfg(feature = "json_encoder")]
         d.insert("json", encode::json::JsonEncoderDeserializer);
 
@@ -271,8 +267,6 @@ impl Deserializers {
     ///         * Requires the `size_trigger` feature.
     ///     * "time" -> `TimeTriggerDeserializer`
     ///         * Requires the `time_trigger` feature.
-    ///     * "onstartup" -> `OnStartUpTriggerDeserializer`
-    ///         * Requires the `onstartup_trigger` feature.
     pub fn new() -> Deserializers {
         Deserializers::default()
     }
@@ -294,9 +288,9 @@ impl Deserializers {
     }
 
     /// Deserializes a value of a specific type and kind.
-    pub fn deserialize<T>(&self, kind: &str, config: Value) -> anyhow::Result<Box<T>>
+    pub fn deserialize<T: ?Sized>(&self, kind: &str, config: Value) -> anyhow::Result<Box<T>>
     where
-        T: Deserializable + ?Sized,
+        T: Deserializable,
     {
         match self.0.get::<KeyAdaptor<T>>().and_then(|m| m.get(kind)) {
             Some(b) => b.deserialize(config, self),
@@ -438,23 +432,15 @@ where
     Option::<S>::deserialize(d).map(|r| r.map(|s| s.0))
 }
 
-#[derive(Clone, Debug, serde::Deserialize)]
+#[derive(Clone, Debug, Derivative, serde::Deserialize)]
+#[derivative(Default)]
 #[serde(deny_unknown_fields)]
 struct Root {
     #[serde(default = "root_level_default")]
+    #[derivative(Default(value = "root_level_default()"))]
     level: LevelFilter,
     #[serde(default)]
     appenders: Vec<String>,
-}
-
-/// Implementing default on Root, which was previously done using "derivative" derive, which is not yet supported by derive_more.
-impl Default for Root {
-    fn default() -> Self {
-        Self {
-            level: root_level_default(),
-            appenders: Default::default(),
-        }
-    }
 }
 
 fn root_level_default() -> LevelFilter {

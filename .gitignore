@@ -1,7 +1,11 @@
+.idea
 target/
+**/*.rs.bk
 Cargo.lock
 .idea/
 *.iml
 .vscode/
 info.log
 log/
+logs
+*.log

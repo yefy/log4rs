@@ -3,11 +3,28 @@
 [![docs](https://docs.rs/log4rs/badge.svg)](https://docs.rs/log4rs)
 [![crates.io](https://img.shields.io/crates/v/log4rs.svg)](https://crates.io/crates/log4rs)
 [![License: MIT OR Apache-2.0](https://img.shields.io/crates/l/clippy.svg)](#license)
-[![Minimum rustc version](https://img.shields.io/badge/rustc-1.75+-green.svg)](https://github.com/estk/log4rs#rust-version-requirements)
-[![CI](https://github.com/estk/log4rs/actions/workflows/main.yml/badge.svg)](https://github.com/estk/log4rs/actions/workflows/main.yml)
+![CI](https://github.com/estk/log4rs/workflows/CI/badge.svg)
+[![Minimum rustc version](https://img.shields.io/badge/rustc-1.69+-green.svg)](https://github.com/estk/log4rs#rust-version-requirements)
 
 log4rs is a highly configurable logging framework modeled after Java's Logback
 and log4j libraries.
+
+## Warning
+
+If you are using the file rotation in your configuration there is a known
+substantial performance issue so listen up! By default the `gzip` feature
+is enabled and when rolling files it will zip log archives automatically.
+This is a problem when the log archives are large as the zip happens in the
+main thread and will halt the process while the zip is completed. Be advised
+that the `gzip` feature will be removed from default features as of `1.0`.
+
+The methods to mitigate this are as follows.
+
+1. Use the `background_rotation` feature which spawns an os thread to do the compression.
+1. Disable the `gzip` feature with `--no-default-features`.
+1. Ensure the archives are small enough that the compression time is acceptable.
+
+For more information see the PR that added [`background_rotation`](https://github.com/estk/log4rs/pull/117).
 
 ## Quick Start
 
@@ -54,7 +71,7 @@ fn main() {
 
 ## Rust Version Requirements
 
-1.75
+1.69
 
 ## Building for Dev
 
@@ -64,24 +81,6 @@ fn main() {
 * Run the tests for all individual features: `./test.sh`
 * Run the tests for all individual features for windows with
   [cross](https://github.com/rust-embedded/cross): `./test.sh win`
-
-
-## Compression
-
-If you are using the file rotation in your configuration there is a known
-substantial performance issue with either the `gzip` or `zstd`
-features. When rolling files it will zip log archives automatically. This is
-a problem when the log archives are large as the zip process occurs in
-the main thread and will halt the process until the zip process
-completes.
-
-The methods to mitigate this are as follows.
-
-1. Use the `background_rotation` feature which spawns an os thread to do the compression.
-2. Do not enable the `gzip` nor the `zstd` features.
-3. Ensure the archives are small enough that the compression time is acceptable.
-
-For more information see the PR that added [`background_rotation`](https://github.com/estk/log4rs/pull/117).
 
 ## License
 
