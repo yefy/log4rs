@@ -82,7 +82,7 @@ harness = false
 version = "1.4"
 
 [dependencies.regex]
-version = "1.11.1"
+version = "1.5"
 
 [dependencies.async-channel]
 version = "1.8.0"
