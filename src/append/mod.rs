@@ -103,7 +103,7 @@ impl Deserializable for dyn Append {
 }
 
 impl<T: Log + fmt::Debug + 'static> Append for T {
-    fn append(&self, record: &Record, multiline: bool) -> anyhow::Result<()> {
+    fn append(&self, record: &Record, _multiline: bool) -> anyhow::Result<()> {
         self.log(record);
         Ok(())
     }

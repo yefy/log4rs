@@ -599,6 +599,7 @@ use lazy_static::lazy_static;
 use regex::Regex;
 
 lazy_static! {
+    /// msg Regex
     pub static ref newline_re: std::sync::Arc<Regex> = std::sync::Arc::new(Regex::new(r"\r?\n").unwrap());
 }
 
