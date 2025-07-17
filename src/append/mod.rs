@@ -89,7 +89,7 @@ mod env_util {
 /// to a file or the console.
 pub trait Append: fmt::Debug + Send + Sync + 'static {
     /// Processes the provided `Record`.
-    fn append(&self, record: &Record) -> anyhow::Result<()>;
+    fn append(&self, record: &Record, multiline: bool) -> anyhow::Result<()>;
 
     /// Flushes all in-flight records.
     fn flush(&self);
@@ -103,7 +103,7 @@ impl Deserializable for dyn Append {
 }
 
 impl<T: Log + fmt::Debug + 'static> Append for T {
-    fn append(&self, record: &Record) -> anyhow::Result<()> {
+    fn append(&self, record: &Record, multiline: bool) -> anyhow::Result<()> {
         self.log(record);
         Ok(())
     }

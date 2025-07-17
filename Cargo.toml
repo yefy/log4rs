@@ -78,6 +78,12 @@ required-features = [
 name = "rotation"
 harness = false
 
+[dependencies.lazy_static]
+version = "1.4"
+
+[dependencies.regex]
+version = "1.11.1"
+
 [dependencies.async-channel]
 version = "1.8.0"
 

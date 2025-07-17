@@ -171,12 +171,13 @@ impl ConfigBuilder {
 pub struct Root {
     level: LevelFilter,
     appenders: Vec<String>,
+    multiline: bool,
 }
 
 impl Root {
     /// Creates a new `RootBuilder` with no appenders.
     pub fn builder() -> RootBuilder {
-        RootBuilder { appenders: vec![] }
+        RootBuilder { appenders: vec![], multiline: false }
     }
 
     /// Returns the minimum level of log messages that the root logger will accept.
@@ -193,12 +194,18 @@ impl Root {
     pub fn set_level(&mut self, level: LevelFilter) {
         self.level = level;
     }
+
+    /// Sets the multiline of log messages that the root logger will accept.
+    pub fn multiline( self) -> bool {
+        self.multiline
+    }
 }
 
 /// A builder for `Root`s.
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct RootBuilder {
     appenders: Vec<String>,
+    multiline: bool,
 }
 
 impl RootBuilder {
@@ -221,11 +228,18 @@ impl RootBuilder {
         self
     }
 
+    /// Sets the multiline of log messages that the root logger will accept.
+    pub fn multiline(mut self, multiline: bool) -> RootBuilder {
+        self.multiline = multiline;
+        self
+    }
+
     /// Consumes the `RootBuilder`, returning the `Root`.
     pub fn build(self, level: LevelFilter) -> Root {
         Root {
             level,
             appenders: self.appenders,
+            multiline: self.multiline,
         }
     }
 }
@@ -311,6 +325,7 @@ pub struct Logger {
     level: LevelFilter,
     appenders: Vec<String>,
     additive: bool,
+    multiline: bool,
 }
 
 impl Logger {
@@ -321,6 +336,7 @@ impl Logger {
         LoggerBuilder {
             appenders: vec![],
             additive: true,
+            multiline: false,
         }
     }
 
@@ -343,6 +359,11 @@ impl Logger {
     pub fn additive(&self) -> bool {
         self.additive
     }
+
+    /// Determines if appenders of parent loggers will also be attached to this logger.
+    pub fn multiline(&self) -> bool {
+        self.multiline
+    }
 }
 
 /// A builder for `Logger`s.
@@ -350,6 +371,7 @@ impl Logger {
 pub struct LoggerBuilder {
     appenders: Vec<String>,
     additive: bool,
+    multiline: bool,
 }
 
 impl LoggerBuilder {
@@ -378,6 +400,13 @@ impl LoggerBuilder {
         self
     }
 
+    /// Sets the multiline of the logger.
+    pub fn multiline(mut self, multiline: bool) -> LoggerBuilder {
+        self.multiline = multiline;
+        self
+    }
+
+
     /// Consumes the `LoggerBuilder`, returning the `Logger`.
     pub fn build<T>(self, name: T, level: LevelFilter) -> Logger
     where
@@ -388,6 +417,7 @@ impl LoggerBuilder {
             level,
             appenders: self.appenders,
             additive: self.additive,
+            multiline: self.multiline,
         }
     }
 }

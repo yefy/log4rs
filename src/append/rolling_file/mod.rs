@@ -163,7 +163,7 @@ pub struct RollingFileAppender {
 }
 
 impl Append for RollingFileAppender {
-    fn append(&self, record: &Record) -> anyhow::Result<()> {
+    fn append(&self, record: &Record, multiline: bool) -> anyhow::Result<()> {
         // TODO(eas): Perhaps this is better as a concurrent queue?
         let mut writer = self.writer.lock();
 
@@ -185,10 +185,10 @@ impl Append for RollingFileAppender {
             self.policy.process(&mut file)?;
 
             let log_writer_new = self.get_writer(&mut writer)?;
-            self.encoder.encode(log_writer_new, record)?;
+            self.encoder.encode(log_writer_new, record, multiline)?;
             log_writer_new.flush()?;
         } else {
-            self.encoder.encode(log_writer, record)?;
+            self.encoder.encode(log_writer, record, multiline)?;
             log_writer.flush()?;
             let len = log_writer.len;
 

@@ -348,6 +348,7 @@ impl RawConfig {
     pub fn root(&self) -> config::Root {
         config::Root::builder()
             .appenders(self.root.appenders.clone())
+            .multiline(self.root.multiline)
             .build(self.root.level)
     }
 
@@ -359,6 +360,7 @@ impl RawConfig {
                 config::Logger::builder()
                     .appenders(logger.appenders.clone())
                     .additive(logger.additive)
+                    .multiline(logger.multiline)
                     .build(name.clone(), logger.level)
             })
             .collect()
@@ -441,6 +443,8 @@ struct Root {
     level: LevelFilter,
     #[serde(default)]
     appenders: Vec<String>,
+    #[serde(default)]
+    multiline: bool,
 }
 
 fn root_level_default() -> LevelFilter {
@@ -455,6 +459,9 @@ struct Logger {
     appenders: Vec<String>,
     #[serde(default = "logger_additive_default")]
     additive: bool,
+    #[serde(default)]
+    multiline: bool,
+
 }
 
 fn logger_additive_default() -> bool {

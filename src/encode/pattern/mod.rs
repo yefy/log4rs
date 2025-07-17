@@ -312,20 +312,20 @@ enum Chunk {
 }
 
 impl Chunk {
-    fn encode(&self, w: &mut dyn encode::Write, record: &Record) -> io::Result<()> {
+    fn encode(&self, w: &mut dyn encode::Write, record: &Record, multiline: bool) -> io::Result<()> {
         match *self {
             Chunk::Text(ref s) => w.write_all(s.as_bytes()),
             Chunk::Formatted {
                 ref chunk,
                 ref params,
             } => match (params.min_width, params.max_width, params.align) {
-                (None, None, _) => chunk.encode(w, record),
+                (None, None, _) => chunk.encode(w, record, multiline),
                 (None, Some(max_width), _) => {
                     let mut w = MaxWidthWriter {
                         remaining: max_width,
                         w,
                     };
-                    chunk.encode(&mut w, record)
+                    chunk.encode(&mut w, record, multiline)
                 }
                 (Some(min_width), None, Alignment::Left) => {
                     let mut w = LeftAlignWriter {
@@ -333,7 +333,7 @@ impl Chunk {
                         fill: params.fill,
                         w,
                     };
-                    chunk.encode(&mut w, record)?;
+                    chunk.encode(&mut w, record, multiline)?;
                     w.finish()
                 }
                 (Some(min_width), None, Alignment::Right) => {
@@ -343,7 +343,7 @@ impl Chunk {
                         w,
                         buf: vec![],
                     };
-                    chunk.encode(&mut w, record)?;
+                    chunk.encode(&mut w, record, multiline)?;
                     w.finish()
                 }
                 (Some(min_width), Some(max_width), Alignment::Left) => {
@@ -355,7 +355,7 @@ impl Chunk {
                             w,
                         },
                     };
-                    chunk.encode(&mut w, record)?;
+                    chunk.encode(&mut w, record, multiline)?;
                     w.finish()
                 }
                 (Some(min_width), Some(max_width), Alignment::Right) => {
@@ -368,7 +368,7 @@ impl Chunk {
                         },
                         buf: vec![],
                     };
-                    chunk.encode(&mut w, record)?;
+                    chunk.encode(&mut w, record, multiline)?;
                     w.finish()
                 }
             },
@@ -595,15 +595,35 @@ enum FormattedChunk {
     Mdc(String, String),
 }
 
+use lazy_static::lazy_static;
+use regex::Regex;
+
+lazy_static! {
+    pub static ref newline_re: std::sync::Arc<Regex> = std::sync::Arc::new(Regex::new(r"\r?\n").unwrap());
+}
+
 impl FormattedChunk {
-    fn encode(&self, w: &mut dyn encode::Write, record: &Record) -> io::Result<()> {
+    fn encode(&self, w: &mut dyn encode::Write, record: &Record, multiline: bool) -> io::Result<()> {
         match *self {
             FormattedChunk::Time(ref fmt, Timezone::Utc) => write!(w, "{}", Utc::now().format(fmt)),
             FormattedChunk::Time(ref fmt, Timezone::Local) => {
                 write!(w, "{}", Local::now().format(fmt))
             }
             FormattedChunk::Level => write!(w, "{}", record.level()),
-            FormattedChunk::Message => w.write_fmt(*record.args()),
+            FormattedChunk::Message => {
+                if multiline {
+                    w.write_fmt(*record.args())
+                } else {
+                    // let mut message = format!("{}", record.args());
+                    // message = message.replace("\r\n", "\n");
+                    // message = message.replace("\n", "⏎⏎⏎");
+                    // w.write_all(message.as_bytes())
+
+                    let mut message = format!("{}", record.args());
+                    message = newline_re.replace_all(&message, "⏎⏎⏎").into_owned();
+                    w.write_all(message.as_bytes())
+                }
+            },
             FormattedChunk::Module => w.write_all(record.module_path().unwrap_or("???").as_bytes()),
             FormattedChunk::File => w.write_all(record.file().unwrap_or("???").as_bytes()),
             FormattedChunk::Line => match record.line() {
@@ -622,7 +642,7 @@ impl FormattedChunk {
             FormattedChunk::Newline => w.write_all(NEWLINE.as_bytes()),
             FormattedChunk::Align(ref chunks) => {
                 for chunk in chunks {
-                    chunk.encode(w, record)?;
+                    chunk.encode(w, record, multiline)?;
                 }
                 Ok(())
             }
@@ -637,7 +657,7 @@ impl FormattedChunk {
                     _ => {}
                 }
                 for chunk in chunks {
-                    chunk.encode(w, record)?;
+                    chunk.encode(w, record, multiline)?;
                 }
                 match record.level() {
                     Level::Error | Level::Warn | Level::Info | Level::Trace => {
@@ -650,7 +670,7 @@ impl FormattedChunk {
             FormattedChunk::Debug(ref chunks) => {
                 if cfg!(debug_assertions) {
                     for chunk in chunks {
-                        chunk.encode(w, record)?;
+                        chunk.encode(w, record, multiline)?;
                     }
                 }
                 Ok(())
@@ -658,7 +678,7 @@ impl FormattedChunk {
             FormattedChunk::Release(ref chunks) => {
                 if !cfg!(debug_assertions) {
                     for chunk in chunks {
-                        chunk.encode(w, record)?;
+                        chunk.encode(w, record, multiline)?;
                     }
                 }
                 Ok(())
@@ -688,9 +708,9 @@ impl Default for PatternEncoder {
 }
 
 impl Encode for PatternEncoder {
-    fn encode(&self, w: &mut dyn encode::Write, record: &Record) -> anyhow::Result<()> {
+    fn encode(&self, w: &mut dyn encode::Write, record: &Record, multiline: bool) -> anyhow::Result<()> {
         for chunk in &self.chunks {
-            chunk.encode(w, record)?;
+            chunk.encode(w, record, multiline)?;
         }
         Ok(())
     }

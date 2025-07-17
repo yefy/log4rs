@@ -63,12 +63,20 @@ impl JsonEncoder {
         w: &mut dyn Write,
         time: DateTime<Local>,
         record: &Record,
+        multiline: bool,
     ) -> anyhow::Result<()> {
+        let mut message = format!("{}", record.args());
+        if !multiline {
+            use crate::encode::pattern::newline_re;
+            message = newline_re.replace_all(&message, "⏎⏎⏎").into_owned();
+        }
+
         let thread = thread::current();
         let message = Message {
             time: time.format_with_items(Some(Item::Fixed(Fixed::RFC3339)).into_iter()),
             level: record.level(),
-            message: record.args(),
+            //message: record.args(),
+            message,
             module_path: record.module_path(),
             file: record.file(),
             line: record.line(),
@@ -84,8 +92,8 @@ impl JsonEncoder {
 }
 
 impl Encode for JsonEncoder {
-    fn encode(&self, w: &mut dyn Write, record: &Record) -> anyhow::Result<()> {
-        self.encode_inner(w, Local::now(), record)
+    fn encode(&self, w: &mut dyn Write, record: &Record, multiline: bool) -> anyhow::Result<()> {
+        self.encode_inner(w, Local::now(), record, multiline)
     }
 }
 
@@ -94,8 +102,9 @@ struct Message<'a> {
     #[serde(serialize_with = "ser_display")]
     time: DelayedFormat<option::IntoIter<Item<'a>>>,
     level: Level,
-    #[serde(serialize_with = "ser_display")]
-    message: &'a fmt::Arguments<'a>,
+    //#[serde(serialize_with = "ser_display")]
+    //message: &'a fmt::Arguments<'a>,
+    message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     module_path: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]

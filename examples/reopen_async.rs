@@ -16,7 +16,17 @@ async fn do_main() -> anyhow::Result<()> {
     let log4_handle = log4rs::init_file("./conf/log4rs.yaml", Default::default())
         .map_err(|e| anyhow::anyhow!("err:log4rs::init_file => e:{:?}", e))?;
 
-    log::info!("********* reopen");
+    log::info!("multiline ********* reopen");
+    log::info!(target:"main", "{}", "multiline ********* reopen");
+    log::info!(target:"test", "{}", "multiline ********* reopen");
+
+    let info_str = r#"multiline 1111
+222222
+3333333"#;
+    log::info!("{}", info_str);
+    log::info!(target:"main", "{}", info_str);
+    log::info!(target:"test", "{}", info_str);
+
     let reopen_wait = log4_handle.reopen();
     let _ = reopen_wait.recv().await;
     log::info!("********* end");

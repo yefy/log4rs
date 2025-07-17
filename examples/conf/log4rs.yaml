@@ -15,20 +15,33 @@ appenders:
       kind: pattern
       pattern: "{d(%Y-%m-%d %H:%M:%S)(utc)} {h({l:<6})} {t} {f}:{L} {m}{n}"
     append: true
+  main_file:
+    kind: file
+    path: "logs/main_reopen.log"
+    encoder:
+      kind: pattern
+      pattern: "{d(%Y-%m-%d %H:%M:%S)(utc)} {h({l:<6})} {t} {f}:{L} {m}{n}"
+    append: true
 # 对全局 log 进行配置
 root:
   level: info
+  multiline: false
   appenders:
-    - stdout
+    #- stdout
     - file
 
 loggers:
   main:
     level: trace
     additive: true
+    multiline: false
+    appenders:
+      #- stdout
+      - main_file
   test:
     level: trace
     additive: true
+    multiline: true
 
 
 #"{d(%Y-%m-%d %H:%M:%S)} {h({l})} {T}:{I} {f}:{L} {M}: {m}{n}"

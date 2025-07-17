@@ -210,18 +210,19 @@ type FnvHashMap<K, V> = HashMap<K, V, BuildHasherDefault<FnvHasher>>;
 struct ConfiguredLogger {
     level: LevelFilter,
     appenders: Vec<usize>,
+    multiline: bool,
     children: FnvHashMap<String, ConfiguredLogger>,
 }
 
 impl ConfiguredLogger {
-    fn add(&mut self, path: &str, mut appenders: Vec<usize>, additive: bool, level: LevelFilter) {
+    fn add(&mut self, path: &str, mut appenders: Vec<usize>, additive: bool, level: LevelFilter, multiline: bool) {
         let (part, rest) = match path.find("::") {
             Some(idx) => (&path[..idx], &path[idx + 2..]),
             None => (path, ""),
         };
 
         if let Some(child) = self.children.get_mut(part) {
-            child.add(rest, appenders, additive, level);
+            child.add(rest, appenders, additive, level, multiline);
             return;
         }
 
@@ -233,15 +234,17 @@ impl ConfiguredLogger {
             ConfiguredLogger {
                 level,
                 appenders,
+                multiline,
                 children: FnvHashMap::default(),
             }
         } else {
             let mut child = ConfiguredLogger {
                 level: self.level,
                 appenders: self.appenders.clone(),
+                multiline: self.multiline,
                 children: FnvHashMap::default(),
             };
-            child.add(rest, appenders, additive, level);
+            child.add(rest, appenders, additive, level, multiline);
             child
         };
 
@@ -277,7 +280,7 @@ impl ConfiguredLogger {
         let mut errors = vec![];
         if self.enabled(record.level()) {
             for &idx in &self.appenders {
-                if let Err(err) = appenders[idx].append(record) {
+                if let Err(err) = appenders[idx].append(record, self.multiline) {
                     errors.push(err);
                 }
             }
@@ -298,7 +301,7 @@ struct Appender {
 }
 
 impl Appender {
-    fn append(&self, record: &Record) -> anyhow::Result<()> {
+    fn append(&self, record: &Record, multiline: bool) -> anyhow::Result<()> {
         for filter in &self.filters {
             match filter.filter(record) {
                 filter::Response::Accept => break,
@@ -307,7 +310,7 @@ impl Appender {
             }
         }
 
-        self.appender.append(record)
+        self.appender.append(record, multiline)
     }
 
     fn flush(&self) {
@@ -359,6 +362,7 @@ impl SharedLogger {
                     .iter()
                     .map(|appender| appender_map[&**appender])
                     .collect(),
+                multiline: root.multiline(),
                 children: FnvHashMap::default(),
             };
 
@@ -370,7 +374,7 @@ impl SharedLogger {
                     .iter()
                     .map(|appender| appender_map[&**appender])
                     .collect();
-                root.add(logger.name(), appenders, logger.additive(), logger.level());
+                root.add(logger.name(), appenders, logger.additive(), logger.level(), logger.multiline());
             }
 
             root

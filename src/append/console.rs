@@ -127,10 +127,10 @@ pub struct ConsoleAppender {
 }
 
 impl Append for ConsoleAppender {
-    fn append(&self, record: &Record) -> anyhow::Result<()> {
+    fn append(&self, record: &Record, multiline: bool) -> anyhow::Result<()> {
         if self.do_write {
             let mut writer = self.writer.lock();
-            self.encoder.encode(&mut writer, record)?;
+            self.encoder.encode(&mut writer, record, multiline)?;
             writer.flush()?;
         }
         Ok(())
