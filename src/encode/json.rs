@@ -36,6 +36,7 @@ use std::{fmt, option, thread};
 #[cfg(feature = "config_parsing")]
 use crate::config::{Deserialize, Deserializers};
 use crate::encode::{Encode, Write, NEWLINE};
+use crate::encode::pattern::END_OF_LINE;
 
 /// The JSON encoder's configuration
 #[cfg(feature = "config_parsing")]
@@ -68,7 +69,7 @@ impl JsonEncoder {
         let mut message = format!("{}", record.args());
         if !multiline {
             use crate::encode::pattern::newline_re;
-            message = newline_re.replace_all(&message, "⏎⏎⏎").into_owned();
+            message = newline_re.replace_all(&message, END_OF_LINE).into_owned();
         }
 
         let thread = thread::current();

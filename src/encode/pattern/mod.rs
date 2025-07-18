@@ -603,6 +603,9 @@ lazy_static! {
     pub static ref newline_re: std::sync::Arc<Regex> = std::sync::Arc::new(Regex::new(r"\r?\n").unwrap());
 }
 
+/// END_OF_LINE
+pub const END_OF_LINE: &str = "<<EOL>>";
+
 impl FormattedChunk {
     fn encode(&self, w: &mut dyn encode::Write, record: &Record, multiline: bool) -> io::Result<()> {
         match *self {
@@ -617,11 +620,11 @@ impl FormattedChunk {
                 } else {
                     // let mut message = format!("{}", record.args());
                     // message = message.replace("\r\n", "\n");
-                    // message = message.replace("\n", "⏎⏎⏎");
+                    // message = message.replace("\n", END_OF_LINE);
                     // w.write_all(message.as_bytes())
 
                     let mut message = format!("{}", record.args());
-                    message = newline_re.replace_all(&message, "⏎⏎⏎").into_owned();
+                    message = newline_re.replace_all(&message, END_OF_LINE).into_owned();
                     w.write_all(message.as_bytes())
                 }
             },
