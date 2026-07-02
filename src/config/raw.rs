@@ -465,7 +465,7 @@ struct Logger {
 }
 
 fn logger_additive_default() -> bool {
-    true
+    false
 }
 
 #[cfg(test)]
