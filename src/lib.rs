@@ -475,6 +475,7 @@ impl Handle {
 pub struct Log4Handle {
     reopen_flag: Arc<AtomicBool>,
     reopen_async_channel: Arc<AsyncChannel<async_channel::Sender<()>>>,
+    root_console: Arc<AtomicBool>,
 }
 
 impl Log4Handle {
@@ -483,6 +484,7 @@ impl Log4Handle {
         Self {
             reopen_flag: Arc::new(AtomicBool::new(false)),
             reopen_async_channel: Arc::new(AsyncChannel::new(0)),
+            root_console: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -510,6 +512,15 @@ impl Log4Handle {
             }
         }
         txs
+    }
+
+    /// Returns whether the root logger currently has a console appender attached.
+    pub fn is_root_console(&self) -> bool {
+        self.root_console.load(Ordering::Relaxed)
+    }
+
+    pub(crate) fn set_root_console(&self, enabled: bool) {
+        self.root_console.store(enabled, Ordering::Relaxed);
     }
 }
 

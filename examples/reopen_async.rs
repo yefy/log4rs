@@ -16,6 +16,7 @@ async fn do_main() -> anyhow::Result<()> {
     let log4_handle = log4rs::init_file("./conf/log4rs.yaml", Default::default())
         .map_err(|e| anyhow::anyhow!("err:log4rs::init_file => e:{:?}", e))?;
 
+    println!("is_root_console:{}", log4_handle.is_root_console());
     log::info!("multiline ********* reopen");
     log::info!(target:"main", "{}", "multiline ********* reopen");
     log::info!(target:"test", "{}", "multiline ********* reopen");

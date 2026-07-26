@@ -32,8 +32,10 @@ where
     let config = format.parse(&source)?;
 
     let refresh_rate = config.refresh_rate();
+    let root_console = config.is_root_console();
     let config = deserialize(&config, &deserializers);
     let log4_handle = Log4Handle::new();
+    log4_handle.set_root_console(root_console);
 
     match init_config(config) {
         Ok(handle) => {
@@ -248,6 +250,8 @@ impl ConfigReloader {
 
         let config = self.format.parse(&self.source)?;
         let rate = config.refresh_rate();
+        self.log4_handle
+            .set_root_console(config.is_root_console());
         let config = deserialize(&config, &self.deserializers);
 
         eprintln!("{}", desc);

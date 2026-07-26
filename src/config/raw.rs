@@ -397,6 +397,16 @@ impl RawConfig {
     pub fn refresh_rate(&self) -> Option<Duration> {
         self.refresh_rate
     }
+
+    /// Returns whether the root logger has a console appender attached.
+    pub fn is_root_console(&self) -> bool {
+        self.root.appenders.iter().any(|name| {
+            self.appenders
+                .get(name)
+                .map(|appender| appender.kind == "console")
+                .unwrap_or(false)
+        })
+    }
 }
 
 fn de_duration<'de, D>(d: D) -> Result<Option<Duration>, D::Error>
